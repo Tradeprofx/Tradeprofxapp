@@ -10,16 +10,27 @@ import { useDevice } from '@deriv-com/ui';
 import { useIsHubRedirectionEnabled } from '@deriv/hooks';
 import { useStore } from '@deriv/stores';
 
-const PlatformBox = ({ platform: { icon, description } }) => (
-    <React.Fragment>
-        <div className='platform-dropdown__list-platform-background' />
+const PlatformBox = ({ platform: { icon, description, name, title } }) => {
+    // Custom branding for TradeProfx
+    const is_tradeprofx = window.location.hostname === 'tradeprofxapp.pages.dev';
+    const platform_title = is_tradeprofx && name === 'Deriv Trader' 
+        ? 'TradeProfx Trader' 
+        : title;
 
-        <div className='platform-switcher__dropdown' data-testid='dt_platform_box_icon'>
-            <Icon icon={icon} height={42} width={150} description={icon} />
-            <p className='platform-dropdown__list-platform-description'>{description()}</p>
-        </div>
-    </React.Fragment>
-);
+    return (
+        <React.Fragment>
+            <div className='platform-dropdown__list-platform-background' />
+
+            <div className='platform-switcher__dropdown' data-testid='dt_platform_box_icon'>
+                <Icon icon={icon} height={42} width={150} description={icon} />
+                <p className='platform-dropdown__list-platform-description'>
+                    {platform_title || description()}
+                </p>
+            </div>
+        </React.Fragment>
+    );
+};
+
 const appendAccountParamToUrl = (link_to, client) => {
     const { is_virtual, currency } = client;
 
