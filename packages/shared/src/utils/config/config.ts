@@ -24,6 +24,7 @@ export const domain_app_ids = {
     'staging-app.deriv.be': 31186,
     'binary.com': 1,
     'test-app.deriv.com': 51072,
+    'tradeprofxapp.pages.dev': 80074, // Add your domain and app ID here
 };
 
 export const platform_app_ids = {
@@ -50,12 +51,19 @@ export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname)
  */
 export const getAppId = () => {
     let app_id = null;
-    const user_app_id = ''; // you can insert Application ID of your registered application here
+    const user_app_id = '80074'; // Insert your Application ID here
     const config_app_id = window.localStorage.getItem('config.app_id');
     const current_domain = getCurrentProductionDomain() || '';
     window.localStorage.removeItem('config.platform'); // Remove config stored in localstorage if there's any.
     const platform = window.sessionStorage.getItem('config.platform');
     const is_bot = isBot();
+    
+    // Check if we're on tradeprofxapp.pages.dev
+    if (window.location.hostname === 'tradeprofxapp.pages.dev') {
+        console.log('TradeProfx: Using app ID 80074 for tradeprofxapp.pages.dev');
+        return 80074; // Always use this App ID for your domain
+    }
+    
     // Added platform at the top since this should take precedence over the config_app_id
     if (platform && platform_app_ids[platform as keyof typeof platform_app_ids]) {
         app_id = platform_app_ids[platform as keyof typeof platform_app_ids];
@@ -80,6 +88,12 @@ export const getAppId = () => {
 export const getSocketURL = (is_wallets = false) => {
     const local_storage_server_url = window.localStorage.getItem('config.server_url');
     if (local_storage_server_url) return local_storage_server_url;
+
+    // For tradeprofxapp.pages.dev, use a specific server
+    if (window.location.hostname === 'tradeprofxapp.pages.dev') {
+        console.log('TradeProfx: Using WebSocket URL: ws.derivws.com Brand: tradeprofx');
+        return 'ws.derivws.com';
+    }
 
     let active_loginid_from_url;
     const search = window.location.search;
