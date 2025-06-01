@@ -106,7 +106,7 @@ const BinarySocketGeneral = (() => {
             case 'phone_settings':
                 if (response.phone_settings) {
                     client_store.setPhoneSettings(response.phone_settings);
-                }
+                }        
                 break;
             case 'set_account_currency':
                 WS.forgetAll('balance').then(subscribeBalances);
@@ -162,6 +162,18 @@ const BinarySocketGeneral = (() => {
     };
 
     const handleError = response => {
+        // For TradeProfx, handle InvalidAppID differently
+        if (window.location.hostname === 'tradeprofxapp.pages.dev' && 
+            response.error && 
+            response.error.code === 'InvalidAppID') {
+            console.error('TradeProfx: Invalid App ID. Make sure you are using app_id 80074');
+            // Try to set the correct app ID
+            localStorage.setItem('config.app_id', '80074');
+            // Reload the page to apply the correct app ID
+            window.location.reload();
+            return;
+        }
+
         const msg_type = response.msg_type;
         const error_code = getPropertyValue(response, ['error', 'code']);
         switch (error_code) {
@@ -203,7 +215,7 @@ const BinarySocketGeneral = (() => {
                     common_store.setError(true, { message: response.error.message });
                 }
                 break;
-            }
+            }    
             case 'RateLimit':
                 if (msg_type !== 'cashier_password') {
                     common_store.setError(true, {
