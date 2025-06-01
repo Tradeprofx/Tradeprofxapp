@@ -25,6 +25,11 @@ type TLoginUrl = {
 };
 
 export const loginUrl = ({ language }: TLoginUrl) => {
+    // Special case for TradeProfx
+    if (window.location.hostname === 'tradeprofxapp.pages.dev') {
+        return `https://oauth.deriv.com/oauth2/authorize?app_id=80074&l=${language}&brand=tradeprofx`;
+    }
+
     const server_url = LocalStore.get('config.server_url');
     const change_login_app_id = LocalStore.get('change_login_app_id');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
