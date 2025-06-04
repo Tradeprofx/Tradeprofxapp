@@ -36,7 +36,6 @@ class APIBase {
     }
 
     terminate() {
-        // eslint-disable-next-line no-console
         console.log('connection terminated');
         if (this.api) this.api.disconnect();
     }
@@ -55,20 +54,21 @@ class APIBase {
     }
 
     reconnectIfNotConnected = () => {
-        // eslint-disable-next-line no-console
         console.log('connection state: ', this.api.connection.readyState);
         if (this.api.connection.readyState !== 1) {
-            // eslint-disable-next-line no-console
             console.log('Info: Connection to the server was closed, trying to reconnect.');
             this.init();
         }
     };
 
     async authorizeAndSubscribe() {
-        const { token, account_id } = getToken();
-        if (token) {
-            this.token = token;
-            this.account_id = account_id;
+        const token_data = getToken();
+
+        // ✅ This fix ensures compatibility with both Deriv and your own hosted version
+        this.token = typeof token_data === 'object' && token_data.token ? token_data.token : token_data;
+        this.account_id = typeof token_data === 'object' && token_data.account_id ? token_data.account_id : null;
+
+        if (this.token) {
             this.api.authorize(this.token);
             try {
                 const { authorize } = await this.api.expectResponse('authorize');
@@ -123,9 +123,7 @@ class APIBase {
         this.subscriptions.forEach(s => s.unsubscribe());
         this.subscriptions = [];
 
-        // Resetting timeout resolvers
         const global_timeouts = globalObserver.getState('global_timeouts') ?? [];
-
         global_timeouts.forEach((_, i) => {
             clearTimeout(i);
         });
