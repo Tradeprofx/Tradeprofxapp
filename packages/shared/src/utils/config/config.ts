@@ -7,22 +7,15 @@ import { isStaging } from '../url/helpers';
  * NOTE:
  * Please use the following command to avoid accidentally committing personal changes
  * git update-index --assume-unchanged packages/shared/src/utils/config.js
+ *
  */
 
 export const livechat_license_id = 12049137;
 export const livechat_client_id = '66aa088aad5a414484c1fd1fa8a5ace7';
 
 export const domain_app_ids = {
-    'deriv.app': 16929,
-    'app.deriv.com': 16929,
-    'staging-app.deriv.com': 16303,
-    'app.deriv.me': 1411,
-    'staging-app.deriv.me': 1411,
-    'app.deriv.be': 30767,
-    'staging-app.deriv.be': 31186,
-    'binary.com': 1,
-    'test-app.deriv.com': 51072,
-    'tradeprofxapp.pages.dev': 80074, // ✅ Your domain & App ID
+    'tradeprofxapp.pages.dev': 80074,
+    'localhost': 80074,
 };
 
 export const platform_app_ids = {
@@ -49,17 +42,12 @@ export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname)
  */
 export const getAppId = () => {
     let app_id = null;
-    const user_app_id = '80074'; // ✅ Your Application ID
+    const user_app_id = '80074'; // your Application ID
     const config_app_id = window.localStorage.getItem('config.app_id');
     const current_domain = getCurrentProductionDomain() || '';
-    window.localStorage.removeItem('config.platform');
+    window.localStorage.removeItem('config.platform'); // Remove config stored in localstorage if there's any.
     const platform = window.sessionStorage.getItem('config.platform');
     const is_bot = isBot();
-
-    if (window.location.hostname === 'tradeprofxapp.pages.dev') {
-        console.log('✅ TradeProfx: Using App ID 80074 for tradeprofxapp.pages.dev');
-        return 80074;
-    }
 
     if (platform && platform_app_ids[platform as keyof typeof platform_app_ids]) {
         app_id = platform_app_ids[platform as keyof typeof platform_app_ids];
@@ -70,12 +58,12 @@ export const getAppId = () => {
         app_id = user_app_id;
     } else if (isStaging()) {
         window.localStorage.removeItem('config.default_app_id');
-        app_id = is_bot ? 19112 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 16303;
+        app_id = is_bot ? 19112 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 80074;
     } else if (/localhost/i.test(window.location.hostname)) {
-        app_id = 36300;
+        app_id = 80074;
     } else {
         window.localStorage.removeItem('config.default_app_id');
-        app_id = is_bot ? 19111 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 16929;
+        app_id = is_bot ? 19111 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 80074;
     }
 
     return app_id;
@@ -83,14 +71,7 @@ export const getAppId = () => {
 
 export const getSocketURL = (is_wallets = false) => {
     const local_storage_server_url = window.localStorage.getItem('config.server_url');
-    if (local_storage_server_url) return local_storage_server_url.startsWith('wss://')
-        ? local_storage_server_url
-        : `wss://${local_storage_server_url}/websockets/v3`;
-
-    if (window.location.hostname === 'tradeprofxapp.pages.dev') {
-        console.log('✅ TradeProfx: Using WebSocket URL wss://ws.derivws.com/websockets/v3');
-        return 'wss://ws.derivws.com/websockets/v3';
-    }
+    if (local_storage_server_url) return local_storage_server_url;
 
     let active_loginid_from_url;
     const search = window.location.search;
@@ -98,7 +79,6 @@ export const getSocketURL = (is_wallets = false) => {
         const params = new URLSearchParams(document.location.search.substring(1));
         active_loginid_from_url = params.get('acct1');
     }
-
     const local_storage_loginid = is_wallets
         ? window.sessionStorage.getItem('active_wallet_loginid') || window.localStorage.getItem('active_wallet_loginid')
         : window.sessionStorage.getItem('active_loginid') || window.localStorage.getItem('active_loginid');
@@ -106,7 +86,7 @@ export const getSocketURL = (is_wallets = false) => {
     const is_real = loginid && !/^(VRT|VRW)/.test(loginid);
 
     const server = is_real ? 'green' : 'blue';
-    const server_url = `wss://${server}.derivws.com/websockets/v3`;
+    const server_url = `${server}.derivws.com`;
 
     return server_url;
 };
@@ -124,7 +104,7 @@ export const checkAndSetEndpointFromUrl = () => {
 
             if (/^(^(www\.)?qa[0-9]{1,4}\.deriv.dev|(.*)\.derivws\.com)$/.test(qa_server) && /^[0-9]+$/.test(app_id)) {
                 localStorage.setItem('config.app_id', app_id);
-                localStorage.setItem('config.server_url', `wss://${qa_server}/websockets/v3`);
+                localStorage.setItem('config.server_url', qa_server);
             }
 
             const params = url_params.toString();
@@ -144,5 +124,6 @@ export const checkAndSetEndpointFromUrl = () => {
 export const getDebugServiceWorker = () => {
     const debug_service_worker_flag = window.localStorage.getItem('debug_service_worker');
     if (debug_service_worker_flag) return !!parseInt(debug_service_worker_flag);
+
     return false;
 };
