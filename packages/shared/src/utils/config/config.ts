@@ -1,21 +1,33 @@
+import { isBot } from '../platform';
+import { isStaging } from '../url/helpers';
+
 /*
  * Configuration values needed in js codes
  *
  * NOTE:
  * Please use the following command to avoid accidentally committing personal changes
  * git update-index --assume-unchanged packages/shared/src/utils/config.js
+ *
  */
 
 export const livechat_license_id = 12049137;
 export const livechat_client_id = '66aa088aad5a414484c1fd1fa8a5ace7';
 
 export const domain_app_ids = {
-    'tradeprofxapp.pages.dev': 80074,
-    'localhost': 80074,
+    // these domains as supported "production domains"
+    'deriv.app': 16929, // TODO: [app-link-refactor] - Remove backwards compatibility for `deriv.app`
+    'app.deriv.com': 16929,
+    'staging-app.deriv.com': 16303,
+    'app.deriv.me': 1411,
+    'staging-app.deriv.me': 1411, // TODO: setup staging for deriv.me
+    'app.deriv.be': 30767,
+    'staging-app.deriv.be': 31186,
+    'binary.com': 1,
+    'https://tradeprofxapp.pages.dev/': 80074,
 };
 
 export const platform_app_ids = {
-    derivgo: 80074,
+    derivgo: 23789,
 };
 
 export const getCurrentProductionDomain = () =>
@@ -33,25 +45,33 @@ export const isTestLink = () => {
 
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);
 
+/**
+ * @deprecated Please use 'WebSocketUtils.getAppId' from '@deriv-com/utils' instead of this.
+ */
 export const getAppId = () => {
     let app_id = null;
-    const user_app_id = '80074';
+    const user_app_id = ''; // you can insert Application ID of your registered application here
     const config_app_id = window.localStorage.getItem('config.app_id');
     const current_domain = getCurrentProductionDomain() || '';
-    window.localStorage.removeItem('config.platform');
+    window.localStorage.removeItem('config.platform'); // Remove config stored in localstorage if there's any.
     const platform = window.sessionStorage.getItem('config.platform');
-
-    if (platform && platform_app_ids[platform]) {
-        app_id = platform_app_ids[platform];
+    const is_bot = isBot();
+    // Added platform at the top since this should take precedence over the config_app_id
+    if (platform && platform_app_ids[platform as keyof typeof platform_app_ids]) {
+        app_id = platform_app_ids[platform as keyof typeof platform_app_ids];
     } else if (config_app_id) {
         app_id = config_app_id;
     } else if (user_app_id.length) {
         window.localStorage.setItem('config.default_app_id', user_app_id);
         app_id = user_app_id;
+    } else if (isStaging()) {
+        window.localStorage.removeItem('config.default_app_id');
+        app_id = is_bot ? 19112 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 16303; // it's being used in endpoint chrome extension - please do not remove
     } else if (/localhost/i.test(window.location.hostname)) {
         app_id = 80074;
     } else {
-        app_id = domain_app_ids[current_domain] || 80074;
+        window.localStorage.removeItem('config.default_app_id');
+        app_id = is_bot ? 19111 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 16929;
     }
 
     return app_id;
@@ -67,16 +87,16 @@ export const getSocketURL = (is_wallets = false) => {
         const params = new URLSearchParams(document.location.search.substring(1));
         active_loginid_from_url = params.get('acct1');
     }
-
     const local_storage_loginid = is_wallets
         ? window.sessionStorage.getItem('active_wallet_loginid') || window.localStorage.getItem('active_wallet_loginid')
         : window.sessionStorage.getItem('active_loginid') || window.localStorage.getItem('active_loginid');
-
     const loginid = local_storage_loginid || active_loginid_from_url;
     const is_real = loginid && !/^(VRT|VRW)/.test(loginid);
 
     const server = is_real ? 'green' : 'blue';
-    return `${server}.derivws.com`;
+    const server_url = `${server}.derivws.com`;
+
+    return server_url;
 };
 
 export const checkAndSetEndpointFromUrl = () => {
@@ -111,5 +131,7 @@ export const checkAndSetEndpointFromUrl = () => {
 
 export const getDebugServiceWorker = () => {
     const debug_service_worker_flag = window.localStorage.getItem('debug_service_worker');
-    return debug_service_worker_flag ? !!parseInt(debug_service_worker_flag) : false;
+    if (debug_service_worker_flag) return !!parseInt(debug_service_worker_flag);
+
+    return false;
 };
