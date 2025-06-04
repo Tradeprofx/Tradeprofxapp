@@ -1,13 +1,9 @@
-import { isBot } from '../platform';
-import { isStaging } from '../url/helpers';
-
 /*
  * Configuration values needed in js codes
  *
  * NOTE:
  * Please use the following command to avoid accidentally committing personal changes
  * git update-index --assume-unchanged packages/shared/src/utils/config.js
- *
  */
 
 export const livechat_license_id = 12049137;
@@ -19,7 +15,7 @@ export const domain_app_ids = {
 };
 
 export const platform_app_ids = {
-    derivgo: 23789,
+    derivgo: 80074,
 };
 
 export const getCurrentProductionDomain = () =>
@@ -37,33 +33,25 @@ export const isTestLink = () => {
 
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);
 
-/**
- * @deprecated Please use 'WebSocketUtils.getAppId' from '@deriv-com/utils' instead of this.
- */
 export const getAppId = () => {
     let app_id = null;
-    const user_app_id = '80074'; // your Application ID
+    const user_app_id = '80074';
     const config_app_id = window.localStorage.getItem('config.app_id');
     const current_domain = getCurrentProductionDomain() || '';
-    window.localStorage.removeItem('config.platform'); // Remove config stored in localstorage if there's any.
+    window.localStorage.removeItem('config.platform');
     const platform = window.sessionStorage.getItem('config.platform');
-    const is_bot = isBot();
 
-    if (platform && platform_app_ids[platform as keyof typeof platform_app_ids]) {
-        app_id = platform_app_ids[platform as keyof typeof platform_app_ids];
+    if (platform && platform_app_ids[platform]) {
+        app_id = platform_app_ids[platform];
     } else if (config_app_id) {
         app_id = config_app_id;
     } else if (user_app_id.length) {
         window.localStorage.setItem('config.default_app_id', user_app_id);
         app_id = user_app_id;
-    } else if (isStaging()) {
-        window.localStorage.removeItem('config.default_app_id');
-        app_id = is_bot ? 19112 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 80074;
     } else if (/localhost/i.test(window.location.hostname)) {
         app_id = 80074;
     } else {
-        window.localStorage.removeItem('config.default_app_id');
-        app_id = is_bot ? 19111 : domain_app_ids[current_domain as keyof typeof domain_app_ids] || 80074;
+        app_id = domain_app_ids[current_domain] || 80074;
     }
 
     return app_id;
@@ -79,16 +67,16 @@ export const getSocketURL = (is_wallets = false) => {
         const params = new URLSearchParams(document.location.search.substring(1));
         active_loginid_from_url = params.get('acct1');
     }
+
     const local_storage_loginid = is_wallets
         ? window.sessionStorage.getItem('active_wallet_loginid') || window.localStorage.getItem('active_wallet_loginid')
         : window.sessionStorage.getItem('active_loginid') || window.localStorage.getItem('active_loginid');
+
     const loginid = local_storage_loginid || active_loginid_from_url;
     const is_real = loginid && !/^(VRT|VRW)/.test(loginid);
 
     const server = is_real ? 'green' : 'blue';
-    const server_url = `${server}.derivws.com`;
-
-    return server_url;
+    return `${server}.derivws.com`;
 };
 
 export const checkAndSetEndpointFromUrl = () => {
@@ -123,7 +111,5 @@ export const checkAndSetEndpointFromUrl = () => {
 
 export const getDebugServiceWorker = () => {
     const debug_service_worker_flag = window.localStorage.getItem('debug_service_worker');
-    if (debug_service_worker_flag) return !!parseInt(debug_service_worker_flag);
-
-    return false;
+    return debug_service_worker_flag ? !!parseInt(debug_service_worker_flag) : false;
 };
