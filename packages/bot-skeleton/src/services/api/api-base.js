@@ -1,143 +1,157 @@
-import { observer as globalObserver } from '../../utils/observer';
-import { doUntilDone, socket_state } from '../tradeEngine/utils/helpers';
-import { generateDerivApiInstance, getLoginId, getToken } from './appId';
+import { getAppId, getSocketURL } from '@deriv/shared';
+import { generateDerivApiInstance, getLoginId, getToken } from '@deriv/bot-skeleton/src/utils';
 
 class APIBase {
-    api;
-    token;
-    account_id;
-    pip_sizes = {};
-    account_info = {};
-    is_running = false;
-    subscriptions = [];
-    time_interval = null;
-    has_activeSymbols = false;
-    is_stopping = false;
+    constructor() {
+        this.api = null;
+        this.token = getToken();
+        this.account_id = getLoginId();
+        this.is_connected = false;
+        this.connection_manager = null;
+        this.subscribers = new Map();
+        
+        // Use YOUR registered App ID for tradeprofxapp.pages.dev
+        this.app_id = 80074; // Your registered App ID
+        
+        console.log('Bot API: Initializing with App ID:', this.app_id);
+    }
 
-    async init(force_update = false) {
-        if (getLoginId()) {
-            this.toggleRunButton(true);
-            if (force_update) this.terminate();
-            this.api = generateDerivApiInstance();
-            this.initEventListeners();
-            await this.authorizeAndSubscribe();
-            if (this.time_interval) clearInterval(this.time_interval);
-            this.time_interval = null;
-            this.getTime();
+    async init() {
+        if (this.api) {
+            return this.api;
+        }
+
+        try {
+            // Use your domain's configuration
+            const server_url = getSocketURL();
+            
+            console.log('Bot API: Connecting to server:', server_url);
+            console.log('Bot API: Using App ID:', this.app_id);
+            console.log('Bot API: Domain:', window.location.hostname);
+            
+            this.api = await generateDerivApiInstance({
+                app_id: this.app_id,
+                server_url: server_url,
+                lang: 'EN'
+            });
+
+            this.setupConnectionHandlers();
+            
+            if (this.token) {
+                await this.authorize();
+            }
+
+            return this.api;
+        } catch (error) {
+            console.error('Bot API: Failed to initialize:', error);
+            throw error;
         }
     }
 
-    getConnectionStatus() {
-        if (this.api?.connection) {
-            const ready_state = this.api.connection.readyState;
-            return socket_state[ready_state] || 'Unknown';
-        }
-        return 'Socket not initialized';
+    setupConnectionHandlers() {
+        if (!this.api) return;
+
+        this.api.onOpen = () => {
+            console.log('Bot API: WebSocket connection opened');
+            this.is_connected = true;
+        };
+
+        this.api.onClose = () => {
+            console.log('Bot API: WebSocket connection closed');
+            this.is_connected = false;
+        };
+
+        this.api.onMessage = (response) => {
+            this.handleResponse(response);
+        };
     }
 
-    terminate() {
-        // eslint-disable-next-line no-console
-        console.log('connection terminated');
-        if (this.api) this.api.disconnect();
-    }
+    async authorize() {
+        if (!this.api || !this.token) {
+            console.log('Bot API: Cannot authorize - missing API or token');
+            return null;
+        }
 
-    initEventListeners() {
-        if (window) {
-            window.addEventListener('online', this.reconnectIfNotConnected);
-            window.addEventListener('focus', this.reconnectIfNotConnected);
+        try {
+            console.log('Bot API: Authorizing with token...');
+            const response = await this.api.authorize(this.token);
+            
+            if (response.error) {
+                console.error('Bot API: Authorization failed:', response.error);
+                return null;
+            }
+
+            console.log('Bot API: Authorization successful:', response.authorize);
+            this.account_id = response.authorize.loginid;
+            
+            return response;
+        } catch (error) {
+            console.error('Bot API: Authorization error:', error);
+            return null;
         }
     }
 
-    async createNewInstance(account_id) {
-        if (this.account_id !== account_id) {
-            await this.init(true);
+    handleResponse(response) {
+        const { msg_type, req_id } = response;
+        
+        // Handle balance updates
+        if (msg_type === 'balance') {
+            console.log('Bot API: Balance update received:', response.balance);
         }
-    }
-
-    reconnectIfNotConnected = () => {
-        // eslint-disable-next-line no-console
-        console.log('connection state: ', this.api.connection.readyState);
-        if (this.api.connection.readyState !== 1) {
-            // eslint-disable-next-line no-console
-            console.log('Info: Connection to the server was closed, trying to reconnect.');
-            this.init();
-        }
-    };
-
-    async authorizeAndSubscribe() {
-        const { token, account_id } = getToken();
-        if (token) {
-            this.token = token;
-            this.account_id = account_id;
-            this.api.authorize(this.token);
-            try {
-                const { authorize } = await this.api.expectResponse('authorize');
-                if (this.has_activeSymbols) {
-                    this.toggleRunButton(false);
-                } else {
-                    this.getActiveSymbols();
-                }
-                await this.subscribe();
-                this.account_info = authorize;
-            } catch (e) {
-                globalObserver.emit('Error', e);
+        
+        // Handle authorization
+        if (msg_type === 'authorize') {
+            if (response.error) {
+                console.error('Bot API: Auth error:', response.error);
+            } else {
+                console.log('Bot API: Auth success:', response.authorize);
             }
         }
+
+        // Notify subscribers
+        if (this.subscribers.has(req_id)) {
+            const callback = this.subscribers.get(req_id);
+            callback(response);
+            this.subscribers.delete(req_id);
+        }
     }
 
-    async subscribe() {
-        await Promise.all([
-            doUntilDone(() => this.api.send({ balance: 1, subscribe: 1 })),
-            doUntilDone(() => this.api.send({ transaction: 1, subscribe: 1 })),
-            doUntilDone(() => this.api.send({ proposal_open_contract: 1, subscribe: 1 })),
-        ]);
-    }
+    async send(request) {
+        if (!this.api) {
+            await this.init();
+        }
 
-    getActiveSymbols = async () => {
-        doUntilDone(() => this.api.send({ active_symbols: 'brief' })).then(({ active_symbols = [] }) => {
-            const pip_sizes = {};
-            if (active_symbols.length) this.has_activeSymbols = true;
-            active_symbols.forEach(({ symbol, pip }) => {
-                pip_sizes[symbol] = +(+pip).toExponential().substring(3);
+        return new Promise((resolve, reject) => {
+            const req_id = this.api.send(request);
+            
+            this.subscribers.set(req_id, (response) => {
+                if (response.error) {
+                    reject(response.error);
+                } else {
+                    resolve(response);
+                }
             });
-            this.pip_sizes = pip_sizes;
-            this.toggleRunButton(false);
-        });
-    };
-
-    toggleRunButton = toggle => {
-        const run_button = document.querySelector('#db-animation__run-button');
-        if (!run_button) return;
-        run_button.disabled = toggle;
-    };
-
-    setIsRunning(toggle = false) {
-        this.is_running = toggle;
-    }
-
-    pushSubscription(subscription) {
-        this.subscriptions.push(subscription);
-    }
-
-    clearSubscriptions() {
-        this.subscriptions.forEach(s => s.unsubscribe());
-        this.subscriptions = [];
-
-        // Resetting timeout resolvers
-        const global_timeouts = globalObserver.getState('global_timeouts') ?? [];
-
-        global_timeouts.forEach((_, i) => {
-            clearTimeout(i);
         });
     }
 
-    getTime() {
-        if (!this.time_interval) {
-            this.time_interval = setInterval(() => {
-                this.api.send({ time: 1 });
-            }, 30000);
+    async getBalance() {
+        try {
+            const response = await this.send({ balance: 1 });
+            console.log('Bot API: Balance response:', response);
+            return response.balance;
+        } catch (error) {
+            console.error('Bot API: Failed to get balance:', error);
+            return null;
+        }
+    }
+
+    disconnect() {
+        if (this.api) {
+            this.api.disconnect();
+            this.api = null;
+            this.is_connected = false;
         }
     }
 }
 
-export const api_base = new APIBase();
+export default APIBase;
